@@ -1,0 +1,209 @@
+#!/bin/bash
+
+source spoof
+source port_analysis
+source fonts
+
+# Alias for the airport utility
+AIRPORT="/System/Library/PrivateFrameworks/Apple80211.framework/Versions/Current/Resources/airport"
+
+##################################################################################
+
+#
+# Prints a help message
+#
+function help() {
+	ms=$(bold macspoof)
+	bold "Name"
+	echo "\t$ms\n"
+	bold "Synopsis"
+
+	echo "\t$ms [-s|--spoof [port]] [-p|--permanent [port]]"
+	echo "\t         [-r|--report [port]] [-l|--list] [-h|--help]"
+
+	bold  "Description"
+	echo "\tThe $ms utility is used to spoof MAC addresses on systems running OS X.\n"
+	echo "\tThe following options are available:\n"
+	echo "\t$(bold '-s|--spoof')\t\tSpoofs the MAC address on the specified hardware port. If no port is specified, the
+				MAC address will be spoofed on the Wi-Fi port (typically en0 or en1). If no MAC
+				address is specified, then one will be randomly generated. If no port is specified
+				but a MAC address is, an error will be thrown and the default port will be spoofed.
+
+				To successfully change the MAC address on a port, all connections on that port will
+				be terminated. Note that changing MAC addresses requires root privileges.\n"
+	echo "\t$(bold '-p|--permanent')\t\tResets the MAC address on the specified port to its permanent value.\n"
+	echo "\t$(bold '-r|--report')\t\tPrints the burned in, or permanent, MAC address for the specified port, as well as the
+				MAC address broadcast on the LAN. If no port is specified, the information will be
+				reported on the Wi-Fi port.\n"
+	echo "\t$(bold '-l|--list')\t\tPrints a list of all the system's hardware ports. If the 'd' flag is set, a more detailed
+				description of each port is printed.\n"
+}
+
+
+#
+# Prints a usage message
+#
+function usage() {
+	echo "Usage: $ms [-s|--spoof [port]] [-p|--permanent [port]]"
+	echo "                [-r|--report [port]] [-l|--list] [-h|--help]"
+}
+
+##################################################################################
+
+# Exit code guide:
+# 1: command line parsing failed
+# 2: script execution failed
+# 3: bad port passed as argument
+
+###################################################################################
+
+# Constants for optarg
+OPT="OPT"
+NONOPT="NONOPT"
+
+#
+# optarg is used to parse optional arguments for command line options.
+# If the value passed is an option, then optarg returns "OPT". Otherwise,
+# optarg returns "NONOPT".
+#
+# Usage: optarg <value>
+#
+function optarg() {
+	# If no argument was passed, print error message and exit
+	if [ $# -eq 0 -o -z "$1" ]; then
+		echo "ERROR: No value passed"
+		echo "Usage: optarg <value>"
+		return 1
+	fi
+
+	if [ $(echo "$1" | cut -c 1) == '-' ]; then
+		# value is an option
+		echo $OPT
+	else
+		# value is not an option
+		echo $NONOPT
+	fi
+}
+
+###################################################################################
+
+
+
+# Print usage message and exit if no options were passed
+[ $# -eq 0 ] && usage && exit 1
+
+DEFAULT=$(wifi_port)
+while [ $# -gt 0 ]; do
+	case $1 in
+		-h|--help)
+			help
+			break;;
+
+		-s|--spoof)
+			# If a port was specified
+			if [ $# -gt 1 ]; then
+				if_opt_stat=$(optarg $2)
+				if [ $if_opt_stat == $OPT ]; then
+					port=$DEFAULT
+					shift 1
+				else
+					port=$2
+					shift 2
+
+					temp_port=$port
+					port=$(check_port $temp_port)
+					if [ $? -eq 3 ]; then
+						echo "$temp_port is an invalid port..."
+						echo "Defaulting to $port..."
+					fi
+				fi
+			else
+				port=$DEFAULT
+				shift 1
+			fi
+						
+			# If a new MAC address was specified
+			if [ $# -gt 0 ]; then
+				add_opt_stat=$(optarg $1)
+				if [ "$add_opt_stat" == "$OPT" ]; then
+					mac_add=$(generate)
+				else
+					mac_add=$1
+					shift 1
+				fi
+			else
+				mac_add=$(generate)
+			fi
+			echo "spoofing $port to $mac_add";;
+
+		-r|--report)
+			if [ $# -gt 1 ]; then
+				port_opt_stat=$(optarg $2)
+				if [ "$port_opt_stat" == "$OPT" ]; then
+					port=$DEFAULT
+				else
+					port=$2
+					shift 1
+				fi
+			else
+				port=$DEFAULT
+			fi
+			shift 1
+
+			temp_port=$port
+			port=$(check_port $temp_port)
+			if [ $? -eq 3 ]; then
+				echo "$temp_port is an invalid port..."
+				echo "Defaulting to $port...\n"
+			fi
+
+			report $(check_port $port);;
+
+		-l|--list)
+			if [ $# -gt 1 ]; then
+				list_opt_stat=$(optarg $2)
+				if [ "$list_opt_stat" == "$NONOPT" ]; then
+					if [ "$2" == "d" ]; then
+						port_list "d"
+					else
+						printf 'WARNING: Unknown option argument (ignored): %s\n' "$2" >&2
+						port_list
+					fi
+					shift 1
+					continue
+				fi
+			fi
+			port_list
+			shift 1;;
+
+		-p|--permanent)
+			# If a port was specified
+			if [ $# -gt 1 ]; then
+				if_opt_stat=$(optarg $2)
+				if [ $if_opt_stat == $OPT ]; then
+					port=$DEFAULT
+					shift 1
+				else
+					port=$2
+					shift 2
+
+					temp_port=$port
+					port=$(check_port $temp_port)
+					if [ $? -eq 3 ]; then
+						echo "$temp_port is an invalid port..."
+						echo "Defaulting to $port..."
+					fi
+				fi
+			else
+				port=$DEFAULT
+				shift 1
+			fi
+			
+			perm_add=$(networksetup -getmacaddress $port | cut -d ' ' -f 3)
+			spoof $port $perm_add;;
+
+		*)
+			printf 'WARNING: Unknown option (ignored): %s\n' "$1" >&2
+			shift 1;;
+	esac
+done

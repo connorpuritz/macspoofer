@@ -1,0 +1,43 @@
+#!/bin/bash
+
+# Functions used to spoof MAC addresses
+
+#
+# Randomly generates and returns a unicast MAC address
+#
+function generate() {
+	# Randomly generate six bytes in hexadecimal
+	for i in {1..6}; do
+		local mac+=$(printf '%02x' $((RANDOM%256)))":"
+	done
+
+	# Configure two least significant bits of first byte to configure the MAC
+	# address as unicast
+	local macadd=$(printf '%02x' $(( 0x$(echo "$mac" | cut -d: -f 1) & 254 | 2)))
+	# Remove last colon from address
+	macadd+=":$(echo "$mac" | cut -d: -f 2-6)"
+
+	echo $macadd
+}
+
+
+#
+# Changes the MAC address on the specified port to the new address provided. All
+# connections on that port will be killed to ensure the MAC address is correctly set.
+#
+# Usage: spoof <port> <mac address>
+#
+function spoof() {
+	local port=$(check_port $1)
+	# Disconnect from wireless ports, MAC won't update otherwise
+	$AIRPORT -z
+
+	# Set new MAC address
+	local macadd=$2
+
+	# Note that this will require root privileges
+	ifconfig $port ether $macadd
+	networksetup -setairportpower $port off
+	echo "New MAC on $port: $macadd"
+}
+

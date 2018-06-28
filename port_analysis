@@ -1,0 +1,74 @@
+#!/bin/bash
+
+# Functions used to analyze hardware ports
+
+source fonts
+
+#
+# Prints a list of all hardware ports on the system. If the "d" flag is set,
+# more details about each port are printed.
+#
+# Usage: port_list ["detailed"]
+#
+function port_list() {
+	echo
+	boldul "Hardware Ports"
+	if [ $# -gt 0 -a "$1" == "d" ]
+	then
+		networksetup -listallhardwareports
+	else
+		networksetup -listallhardwareports | grep "Device"
+	fi
+	echo
+}
+
+
+#
+# Returns the name of the Wi-Fi port on the device.
+#
+function wifi_port() {
+	networksetup -listallhardwareports | sed -n '/Wi-Fi/{n;p;}' | sed -n 's/Device: //p'
+}
+
+
+
+#
+# Checks whether the argument passed is a valid port (as in currently on the list of
+# hardware ports on the system). If the given port is valid, it is returned. If
+# it is not valid, then the default port is returned.
+# Usage: check_port [port]
+#
+function check_port() {
+	# return default
+	if [ $# -eq 0 ]; then
+		echo $(wifi_port)
+		return 3
+	fi
+
+	if_exists=$(networksetup -listallhardwareports | grep "Device" | sed -n 's/Device: //p' | grep -w $1)
+
+	# port not found
+	if [ -z "$if_exists" ]; then
+		echo $(wifi_port)
+		return 3
+	fi
+
+	# port found
+	echo $1
+	return 0
+}
+
+
+#
+# Returns the permanent and current MAC addresses of specified port.
+#
+# Usage: report <port>
+#
+function report() {
+	local port=$1
+	echo
+	boldul "Report"
+	echo "Permanent MAC on $port:" $(networksetup -getmacaddress $port | cut -d ' ' -f 3)
+	echo "Current MAC on $port:" $(ifconfig $port | grep ether | cut -d ' ' -f 2)
+	echo
+}

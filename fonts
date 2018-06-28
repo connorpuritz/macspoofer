@@ -1,0 +1,17 @@
+#!/bin/bash
+
+# Functions to bold and underline text
+
+# Font styles
+UNDERLINE=`tput smul`
+NUNDERLINE=`tput rmul`
+BOLD=`tput bold`
+NBOLD=`tput sgr0`
+
+# Bolds the argument
+function bold() { echo "${BOLD}$1${NBOLD}"; }
+# Underlines the argument
+function ul() { echo "${UNDERLINE}$1${NUNDERLINE}"; }
+# Bolds and underlines the argument
+function boldul() { echo "${UNDERLINE}${BOLD}$1${NBOLD}${NUNDERLINE}"; }
+

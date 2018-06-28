@@ -1,0 +1,9 @@
+#!/bin/bash
+
+OUI_PATH="~/macspoofer/oui/oui_list.txt"
+
+function oui_lookup() {
+	PATH="~/macspoofer/oui/oui_list.txt"
+	grep "$1" $PATH | sed "s/$1//" | xargs
+}
+
