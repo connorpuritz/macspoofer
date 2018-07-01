@@ -7,37 +7,41 @@
 #
 function generate() {
 	# Randomly generate six bytes in hexadecimal
+	local mac
 	for i in {1..6}; do
-		local mac+=$(printf '%02x' $((RANDOM%256)))":"
+		mac+=$(printf '%02x' $((RANDOM%256)))":"
 	done
 
 	# Configure two least significant bits of first byte to configure the MAC
-	# address as unicast
-	local macadd=$(printf '%02x' $(( 0x$(echo "$mac" | cut -d: -f 1) & 254 | 2)))
-	# Remove last colon from address
-	macadd+=":$(echo "$mac" | cut -d: -f 2-6)"
-
-	echo $macadd
+	# address as unicast and remove trailing semicolon
+	echo $(printf '%02x' $(( 0x$(echo "$mac" | cut -d: -f 1) & 254 ))):$(echo "$mac" | cut -d: -f 2-6)
 }
 
 
 #
-# Changes the MAC address on the specified port to the new address provided. All
-# connections on that port will be killed to ensure the MAC address is correctly set.
+# Randomly generates a MAC address based on the passed OUID
 #
+function generate_with_OUID() {
+	# Randomly generate three bytes in hexadecimal
+	local mac=
+	for i in {1..3}; do
+		mac+=$(printf '%02x' $((RANDOM%256)))":"
+	done
+	macadd="$1:$(echo "$mac" | cut -d: -f 2-6)"
+	echo "$1:$(echo "$mac" | cut -d: -f 2-6)"
+}
+
+
+#
+# Changes the MAC address on the specified port to the new address provided.
 # Usage: spoof <port> <mac address>
 #
 function spoof() {
 	local port=$(check_port $1)
-	# Disconnect from wireless ports, MAC won't update otherwise
-	$AIRPORT -z
-
-	# Set new MAC address
 	local macadd=$2
 
 	# Note that this will require root privileges
 	ifconfig $port ether $macadd
-	networksetup -setairportpower $port off
 	echo "New MAC on $port: $macadd"
 }
 

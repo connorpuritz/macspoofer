@@ -4,48 +4,52 @@ source spoof
 source port_analysis
 source fonts
 
-# Alias for the airport utility
 AIRPORT="/System/Library/PrivateFrameworks/Apple80211.framework/Versions/Current/Resources/airport"
 
 ##################################################################################
 
 #
-# Prints a help message
+# Prints a usage message
 #
-function help() {
-	ms=$(bold macspoof)
-	bold "Name"
-	echo "\t$ms\n"
-	bold "Synopsis"
-
-	echo "\t$ms [-s|--spoof [port]] [-p|--permanent [port]]"
-	echo "\t         [-r|--report [port]] [-l|--list] [-h|--help]"
-
-	bold  "Description"
-	echo "\tThe $ms utility is used to spoof MAC addresses on systems running OS X.\n"
-	echo "\tThe following options are available:\n"
-	echo "\t$(bold '-s|--spoof')\t\tSpoofs the MAC address on the specified hardware port. If no port is specified, the
-				MAC address will be spoofed on the Wi-Fi port (typically en0 or en1). If no MAC
-				address is specified, then one will be randomly generated. If no port is specified
-				but a MAC address is, an error will be thrown and the default port will be spoofed.
-
-				To successfully change the MAC address on a port, all connections on that port will
-				be terminated. Note that changing MAC addresses requires root privileges.\n"
-	echo "\t$(bold '-p|--permanent')\t\tResets the MAC address on the specified port to its permanent value.\n"
-	echo "\t$(bold '-r|--report')\t\tPrints the burned in, or permanent, MAC address for the specified port, as well as the
-				MAC address broadcast on the LAN. If no port is specified, the information will be
-				reported on the Wi-Fi port.\n"
-	echo "\t$(bold '-l|--list')\t\tPrints a list of all the system's hardware ports. If the 'd' flag is set, a more detailed
-				description of each port is printed.\n"
+function usage() {
+	echo -e "\t$(bold macspoof) [-s|--spoof [port] [MAC address]] [-p|--permanent [port]]"
+	echo -e "\t	 [-o|--ouidspoof [port] <OUI identifier>] [-r|--report [port]]"
+	echo -e "\t	 [-l|--list [d]] [-i|--identifier <query>]"
+	echo -e "\t	 [-n|--network [port]] [-h|--help]"
 }
 
 
 #
-# Prints a usage message
+# Prints a help message
 #
-function usage() {
-	echo "Usage: $ms [-s|--spoof [port]] [-p|--permanent [port]]"
-	echo "                [-r|--report [port]] [-l|--list] [-h|--help]"
+function help() {
+	bold "Name"
+	echo -e "\t$ms\n"
+	bold "Synopsis"
+
+	usage
+
+	bold  "Description"
+	echo -e "\tThe $(bold macspoof) utility is used to spoof MAC addresses on systems running OS X.\n"
+	echo -e "\tThe following options are available:\n"
+	echo -e "\t$(bold '-s|--spoof')\t\tSpoofs the MAC address on the specified hardware port. If no port is specified,
+				the MAC address will be spoofed on the Wi-Fi port (typically en0 or en1). If no
+				MAC address is specified, then one will be randomly generated. The order of
+				arguments is not optional. Note that changing MAC addresses requires root
+				privileges.\n"
+	echo -e "\t$(bold '-o|--ouidspoof')\t\tPerforms the same functions as the -s option, but takes as a required argument an
+				OUID. That is, three bytes in hexadecimal form (xx:xx:xx). The remaining three
+				bytes of the MAC will be randomly generated. The order of arguments is not optional.\n"
+	echo -e "\t$(bold '-p|--permanent')\t\tResets the MAC address on the specified port to its permanent value.\n"
+	echo -e "\t$(bold '-r|--report')\t\tPriints the burned in, or permanent, MAC address for the specified port, as well as
+				the MAC address broadcast on the LAN. If no port is specified, the Wi-Fi port is
+				defaulted to.\n"
+	echo -e "\t$(bold '-l|--list')\t\tPrints a list of all the system's hardware ports. If the 'd' flag is set, a more
+				detailed analysis of each port is printed.\n"
+	echo -e "\t$(bold '-i|--identifier')\t\tPrints all OUIDs associated with the required search term.\n"
+	echo -e "\t$(bold '-n|--network')\t\tShuts down the specified hardware port. If no port is specified, the Wi-Fi port is
+				defaulted to. This may be necessary after changing the MAC address to reset the
+				port.\n"
 }
 
 ##################################################################################
@@ -85,21 +89,77 @@ function optarg() {
 	fi
 }
 
-###################################################################################
+BP_TMP="temp/_bad_port_output.tmp"
 
+function bad_port() {
+	touch $BP_TMP
+	local output=
+	local temp_port=$1
+	port=$(check_port $temp_port)
+	echo "$?" > $BP_TMP
+	if [ $? -eq 3 ]; then
+		output+="$temp_port is an invalid port...\n"
+		output+="Defaulting to $port...\n"
+	fi
+	output+="$port"
+	echo -e "$output" > $BP_TMP
+	unset port
+}
+
+
+###################################################################################
 
 
 # Print usage message and exit if no options were passed
 [ $# -eq 0 ] && usage && exit 1
 
+# Whether the airport utility was found
+[ -f $AIRPORT ] && ap_found=true || ap_found=false
+
+# Default hardware port
 DEFAULT=$(wifi_port)
+
 while [ $# -gt 0 ]; do
 	case $1 in
-		-h|--help)
-			help
-			break;;
-
 		-s|--spoof)
+			# If a port was specified
+			if [ $# -gt 1 ]; then
+				if_opt_stat=$(optarg $2)
+				if [ $if_opt_stat == $OPT ]; then
+					port=$DEFAULT
+					shift 1
+				else
+					port=$2
+					shift 2
+					
+					bad_port $port
+					port=$(tail -1 $BP_TMP)
+					#sed -i '' '$ d' $BP_TMP
+					cat $BP_TMP
+									
+				fi
+			else
+				port=$DEFAULT
+				shift 1
+			fi
+						
+			# If a new MAC address was specified
+			if [ $# -gt 0 ]; then
+				add_opt_stat=$(optarg $1)
+				if [ "$add_opt_stat" == "$OPT" ]; then
+					mac_add=$(generate)
+				else
+					mac_add=$1
+					shift 1
+				fi
+			else
+				mac_add=$(generate)
+			fi
+			echo "spoofing $port to $mac_add";;
+
+		########################################
+
+		-o|--ouidspoof)
 			# If a port was specified
 			if [ $# -gt 1 ]; then
 				if_opt_stat=$(optarg $2)
@@ -122,19 +182,24 @@ while [ $# -gt 0 ]; do
 				shift 1
 			fi
 						
-			# If a new MAC address was specified
+			# If an OUI was specified
 			if [ $# -gt 0 ]; then
-				add_opt_stat=$(optarg $1)
-				if [ "$add_opt_stat" == "$OPT" ]; then
-					mac_add=$(generate)
+				oui_opt_stat=$(optarg $1)
+				if [ "$oui_opt_stat" == "$OPT" ]; then
+					oui=$(generate_with_ouid $1)
 				else
-					mac_add=$1
-					shift 1
+					echo "No OUID provided"
+					usage
+					exit 1
 				fi
 			else
-				mac_add=$(generate)
+				echo "No OUID provided"
+				usage
+				exit 1
 			fi
-			echo "spoofing $port to $mac_add";;
+			echo "spoofing $port to $oui";;
+
+		########################################
 
 		-r|--report)
 			if [ $# -gt 1 ]; then
@@ -159,6 +224,8 @@ while [ $# -gt 0 ]; do
 
 			report $(check_port $port);;
 
+		########################################
+
 		-l|--list)
 			if [ $# -gt 1 ]; then
 				list_opt_stat=$(optarg $2)
@@ -175,6 +242,8 @@ while [ $# -gt 0 ]; do
 			fi
 			port_list
 			shift 1;;
+
+		########################################
 
 		-p|--permanent)
 			# If a port was specified
@@ -201,6 +270,46 @@ while [ $# -gt 0 ]; do
 			
 			perm_add=$(networksetup -getmacaddress $port | cut -d ' ' -f 3)
 			spoof $port $perm_add;;
+
+		########################################
+
+		-n|--network)
+			if [ $ap_found == false ]; then
+				echo "airport utility not found, unable to proceed"
+				exit 2
+			fi
+			
+			if [ $# -gt 1 ]; then
+				net_opt_stat=$(optarg $2)
+				if [ $net_opt_stat == $OPT ]; then
+					port=$DEFAULT
+					shift 1
+				else
+					port=$2
+					shift 2
+
+					temp_port=$port
+					port=$(check_port $temp_port)
+					if [ $? -eq 3 ]; then
+						echo "$temp_port is an invalid port..."
+						echo "Defaulting to $port..."
+					fi
+				fi
+			else
+				port=$DEFAULT
+				shift 1
+			fi
+			
+			airport -z
+			networksetup -setairportpower $port off;;
+		
+		########################################
+
+		-h|--help)
+			help
+			break;;
+		
+		########################################
 
 		*)
 			printf 'WARNING: Unknown option (ignored): %s\n' "$1" >&2
